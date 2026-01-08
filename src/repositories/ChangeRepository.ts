@@ -1,8 +1,7 @@
-import { ChangeModel } from '../models/Change.model';
 import mongoose from 'mongoose';
 import { Logger } from '../utils/Logger';
-import { IChange } from 'tms-common-db/schemas/change.schema';
 import { TripStateChange } from '../dto/TripStateChange';
+import { ChangeModel, IChange } from '../models';
 
 const logger = Logger.create('ChangeRepository');
 
@@ -23,9 +22,9 @@ export class ChangeRepository implements IChangeRepository {
     createdAt?: Date
   ): Promise<mongoose.Types.ObjectId> {
     const changeData: any = {
-      event_name: changeEvent.eventName,
-      queue_id: queueObjectId,
-      command_issuer: new mongoose.Types.ObjectId(changeEvent.commandIssuer),
+      eventName: changeEvent.eventName,
+      tripId: queueObjectId,
+      commandIssuer: new mongoose.Types.ObjectId(changeEvent.commandIssuer),
       payload: changeEvent.payload,
       version: changeEvent.version || 1,
     };
@@ -53,7 +52,7 @@ export class ChangeRepository implements IChangeRepository {
   async getChangesByQueue(
     queueObjectId: mongoose.Types.ObjectId
   ): Promise<IChange[]> {
-    return await ChangeModel.find({ queue_id: queueObjectId }).sort({
+    return await ChangeModel.find({ tripId: queueObjectId }).sort({
       createdAt: -1,
     });
   }

@@ -98,13 +98,17 @@ export class TripPlanService implements ITripPlanService {
     console.log('Start Time:', startTime);
     console.log('End Time:', endTime);
 
+    // Create ACL with creator as ADMIN
+    const acl = [{ userId, role: 'ADMIN' }];
+
     const tripPlan = await this.tripPlanRepository.createTripPlan(
       name,
       description,
       userId,
       startTime,
       endTime,
-      convertedDateRanges
+      convertedDateRanges,
+      acl
     );
 
     // Create schedule stops if provided

@@ -6,7 +6,7 @@ export {
   ITripPlanSchedule,
 } from './TripPlanSchedule.model';
 export { StopModel, IStop } from './Stop.model';
-export { ChangeModel, IChange } from './Change.model';
+export { ChangeModel, IChange } from './TripChange.model';
 export {
   FailedStreamEventModel,
   IFailedStreamEvent,

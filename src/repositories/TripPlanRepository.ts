@@ -11,7 +11,8 @@ export interface ITripPlanRepository {
     createdBy: string,
     startTime: number,
     endTime: number,
-    dateRanges: Array<{ startDate: Date; endDate: Date }>
+    dateRanges: Array<{ startDate: Date; endDate: Date }>,
+    acl: Array<{ userId: string; role: string }>
   ): Promise<ITripPlan>;
   getTripPlanById(tripPlanId: string): Promise<ITripPlan | null>;
   updateTripPlan(
@@ -36,7 +37,8 @@ export class TripPlanRepository implements ITripPlanRepository {
     createdBy: string,
     startTime: number,
     endTime: number,
-    dateRanges: Array<{ startDate: Date; endDate: Date }>
+    dateRanges: Array<{ startDate: Date; endDate: Date }>,
+    acl: Array<{ userId: string; role: string }>
   ): Promise<ITripPlan> {
     const newTripPlan = new TripPlanModel({
       name,
@@ -46,6 +48,10 @@ export class TripPlanRepository implements ITripPlanRepository {
       startTime,
       endTime,
       dateRanges,
+      acl: acl.map((a) => ({
+        userId: new mongoose.Types.ObjectId(a.userId),
+        role: a.role,
+      })),
     });
 
     await newTripPlan.save();

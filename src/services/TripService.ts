@@ -14,13 +14,7 @@ import { IChangeRepository } from '../repositories/ChangeRepository';
 const logger = Logger.create('TripService');
 
 export interface ITripService {
-  createTrip(
-    tripPlanId: string,
-    startTime: Date,
-    endTime: Date,
-    createdBy: string,
-    acl?: Array<{ userId: string; role: string }>
-  ): Promise<any>;
+  createTrip(tripPlanId: string, userId: string): Promise<any>;
   getTripById(tripId: string, userId: string): Promise<any>;
   getTripsByUser(userId: string): Promise<any[]>;
   startTrip(tripId: string, userId: string): Promise<any>;
@@ -47,52 +41,60 @@ export class TripService implements ITripService {
     this.changeRepository
   );
 
-  async createTrip(
-    tripPlanId: string,
-    startTime: Date,
-    endTime: Date,
-    createdBy: string,
-    acl: Array<{ userId: string; role: string }> = []
-  ): Promise<any> {
+  async createTrip(tripPlanId: string, userId: string): Promise<any> {
     // Validate that the trip plan exists
     const tripPlan = await this.tripPlanRepository.getTripPlanById(tripPlanId);
     if (!tripPlan) {
       throw new NotFoundException(`Trip plan ${tripPlanId} not found`);
     }
 
-    // Validate start time is before end time
-    if (startTime >= endTime) {
-      throw new BadRequestException('Start time must be before end time');
+    // Check if user has ADMIN role in trip plan's ACL
+    const hasAdminRole = tripPlan.acl?.some(
+      (aclEntry) =>
+        aclEntry.userId.toString() === userId && aclEntry.role === 'ADMIN'
+    );
+
+    if (!hasAdminRole) {
+      throw new UnauthorizedException(
+        'You must have ADMIN role in the trip plan to create trips'
+      );
     }
 
-    // Generate a new trip ID
-    const tripId = new mongoose.Types.ObjectId().toString();
+    // Validate that trip plan has date ranges
+    if (!tripPlan.dateRanges || tripPlan.dateRanges.length === 0) {
+      throw new BadRequestException(
+        'Trip plan must have date ranges defined before creating trips'
+      );
+    }
 
-    // Create command
-    const command = new Command(tripId, createdBy, 'CREATE_TRIP', {
+    // Validate that trip plan has schedule (startTime and endTime)
+    if (tripPlan.startTime === undefined || tripPlan.endTime === undefined) {
+      throw new BadRequestException(
+        'Trip plan must have schedule defined before creating trips'
+      );
+    }
+
+    // Create command - the executor will handle creating trips asynchronously
+    // Use tripPlanId as tripId since we're creating multiple trips from one plan
+    const command = new Command(tripPlanId, userId, 'CREATE_TRIP', {
       tripPlanId,
-      startTime: startTime.toISOString(),
-      endTime: endTime.toISOString(),
-      createdBy,
-      acl,
+      userId,
+      tripPlanAcl: tripPlan.acl.map((a) => ({
+        userId: a.userId.toString(),
+        role: a.role,
+      })),
     });
 
-    // Execute command through StateService
-    const change = await this.stateService.executeCommand(command);
+    // Execute command through StateService (will create trips asynchronously)
+    await this.stateService.executeCommand(command);
 
-    // Fetch the created trip
-    const trip = await this.tripRepository.getTripById(tripId);
+    logger.info(`Trip creation initiated for trip plan ${tripPlanId}`);
 
-    logger.info(`Trip ${tripId} created for trip plan ${tripPlanId}`);
-
+    // Return acknowledgment that trips will be created
     return {
-      tripId: trip!._id.toString(),
-      tripPlanId: trip!.tripPlanId.toString(),
-      startTime: trip!.startTime,
-      endTime: trip!.endTime,
-      status: trip!.status,
-      acl: trip!.acl,
-      createdAt: trip!.createdAt,
+      message: 'Trips are being created asynchronously',
+      tripPlanId: tripPlanId,
+      status: 'processing',
     };
   }
 

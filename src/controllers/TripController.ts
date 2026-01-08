@@ -10,6 +10,7 @@ export class TripController {
 
   /**
    * Create a new trip
+   * Only requires tripPlanId - will create trips for all dates in the trip plan's date ranges
    */
   createTrip = async (
     req: Request,
@@ -17,7 +18,7 @@ export class TripController {
     next: NextFunction
   ): Promise<void> => {
     try {
-      const { tripPlanId, startTime, endTime, acl } = req.body;
+      const { tripPlanId } = req.body;
       const userId = req.user?.id;
 
       if (!userId) {
@@ -28,25 +29,19 @@ export class TripController {
         return;
       }
 
-      if (!tripPlanId || !startTime || !endTime) {
+      if (!tripPlanId) {
         res.status(StatusCodes.BAD_REQUEST).json({
           success: false,
-          message: 'tripPlanId, startTime, and endTime are required',
+          message: 'tripPlanId is required',
         });
         return;
       }
 
-      const trip = await this.tripService.createTrip(
-        tripPlanId,
-        new Date(startTime),
-        new Date(endTime),
-        userId,
-        acl
-      );
+      const result = await this.tripService.createTrip(tripPlanId, userId);
 
-      res.status(StatusCodes.CREATED).json({
+      res.status(StatusCodes.ACCEPTED).json({
         success: true,
-        data: trip,
+        data: result,
       });
     } catch (error) {
       next(error);

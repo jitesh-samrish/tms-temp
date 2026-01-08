@@ -5,6 +5,16 @@ import { TripService } from '../../services/TripService';
 import { TripRepository } from '../../repositories/TripRepository';
 import { TripPlanRepository } from '../../repositories/TripPlanRepository';
 import { ChangeRepository } from '../../repositories/ChangeRepository';
+import {
+  validateBody,
+  validateParams,
+} from '../../utils/validators/Request.validator';
+import {
+  createTripSchema,
+  tripIdParamSchema,
+  cancelTripSchema,
+  updateTripACLSchema,
+} from '../../utils/validators/schemas/Trip.zodSchema';
 
 const tripRouter = express.Router();
 
@@ -20,7 +30,12 @@ const tripService = new TripService(
 const tripController = new TripController(tripService);
 
 // Create a new trip
-tripRouter.post('/', AuthMiddleware.authenticate, tripController.createTrip);
+tripRouter.post(
+  '/',
+  AuthMiddleware.authenticate,
+  validateBody(createTripSchema),
+  tripController.createTrip
+);
 
 // Get all trips for the authenticated user
 tripRouter.get('/', AuthMiddleware.authenticate, tripController.getUserTrips);
@@ -29,6 +44,7 @@ tripRouter.get('/', AuthMiddleware.authenticate, tripController.getUserTrips);
 tripRouter.get(
   '/:tripId',
   AuthMiddleware.authenticate,
+  validateParams(tripIdParamSchema),
   tripController.getTripById
 );
 
@@ -36,6 +52,7 @@ tripRouter.get(
 tripRouter.post(
   '/:tripId/start',
   AuthMiddleware.authenticate,
+  validateParams(tripIdParamSchema),
   tripController.startTrip
 );
 
@@ -43,6 +60,7 @@ tripRouter.post(
 tripRouter.post(
   '/:tripId/complete',
   AuthMiddleware.authenticate,
+  validateParams(tripIdParamSchema),
   tripController.completeTrip
 );
 
@@ -50,6 +68,8 @@ tripRouter.post(
 tripRouter.post(
   '/:tripId/cancel',
   AuthMiddleware.authenticate,
+  validateParams(tripIdParamSchema),
+  validateBody(cancelTripSchema),
   tripController.cancelTrip
 );
 
@@ -57,6 +77,8 @@ tripRouter.post(
 tripRouter.put(
   '/:tripId/acl',
   AuthMiddleware.authenticate,
+  validateParams(tripIdParamSchema),
+  validateBody(updateTripACLSchema),
   tripController.updateTripACL
 );
 
