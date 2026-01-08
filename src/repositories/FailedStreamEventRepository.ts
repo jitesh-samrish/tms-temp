@@ -1,7 +1,7 @@
 import { FailedStreamEventModel } from '../models/FailedStreamEvent.model';
 import mongoose from 'mongoose';
 import { Logger } from '../utils/Logger';
-import { IFailedStreamEvent } from 'qms-common-db/schemas/failedStreamEvent.schema';
+import { IFailedStreamEvent } from 'tms-common-db/schemas/failedStreamEvent.schema';
 
 const logger = Logger.create('FailedStreamEventRepository');
 

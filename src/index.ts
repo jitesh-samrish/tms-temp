@@ -26,7 +26,7 @@ app.use(RequestLogger.log);
 // Register action executors
 registerAllExecutors();
 
-app.use('/qms/v1', v1Router);
+app.use('/tms/v1', v1Router);
 
 // Register global error handler (must be last)
 app.use(GlobalErrorHandler.handle);

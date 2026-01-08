@@ -1,3 +1,9 @@
+import { ExecutorFactory } from '../../registry/ExecutorRegistry';
+import { CreateTripExecutor } from '../../command.executors/CreateTripExecutor';
+import { StartTripExecutor } from '../../command.executors/StartTripExecutor';
+import { CompleteTripExecutor } from '../../command.executors/CompleteTripExecutor';
+import { CancelTripExecutor } from '../../command.executors/CancelTripExecutor';
+import { TripRepository } from '../../repositories/TripRepository';
 import { Logger } from '../../utils/Logger';
 
 const logger = Logger.create('ExecutorRegistry-V1');
@@ -11,8 +17,29 @@ export function registerV1Executors(): void {
   const VERSION_1 = 1;
 
   // Create repository instances
+  const tripRepository = new TripRepository();
 
   // Register all command implementations for version 1
+  ExecutorFactory.register(
+    'CREATE_TRIP',
+    new CreateTripExecutor(tripRepository),
+    VERSION_1
+  );
+  ExecutorFactory.register(
+    'START_TRIP',
+    new StartTripExecutor(tripRepository),
+    VERSION_1
+  );
+  ExecutorFactory.register(
+    'COMPLETE_TRIP',
+    new CompleteTripExecutor(tripRepository),
+    VERSION_1
+  );
+  ExecutorFactory.register(
+    'CANCEL_TRIP',
+    new CancelTripExecutor(tripRepository),
+    VERSION_1
+  );
 
-  logger.info(`TM_Version_1 executors registered successfully`);
+  logger.info('Version 1 command executors registered successfully');
 }

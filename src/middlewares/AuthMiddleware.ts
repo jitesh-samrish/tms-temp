@@ -4,8 +4,8 @@ import * as jwt from 'jsonwebtoken';
 import { ServerConfig } from '../config/ServerConfig';
 import { Logger } from '../utils/Logger';
 import { RedisUtils } from '../utils/RedisUtils';
-import { SessionRepository } from '../repositories/SessionRepository';
 import { RedisClient } from '../config/RedisClient';
+import { SessionRepository } from '../repositories/SessionRepository';
 
 const logger = Logger.create('AuthMiddleware');
 

@@ -1,15 +1,15 @@
 import { ChangeModel } from '../models/Change.model';
-import { QueueStateChange } from '../dto/QueueStateChange';
 import mongoose from 'mongoose';
 import { Logger } from '../utils/Logger';
-import { IChange } from 'qms-common-db/schemas/change.schema';
+import { IChange } from 'tms-common-db/schemas/change.schema';
+import { TripStateChange } from '../dto/TripStateChange';
 
 const logger = Logger.create('ChangeRepository');
 
 export interface IChangeRepository {
   saveChange(
     queueObjectId: mongoose.Types.ObjectId,
-    changeEvent: QueueStateChange,
+    changeEvent: TripStateChange,
     createdAt?: Date
   ): Promise<mongoose.Types.ObjectId>;
   getChangeById(changeId: mongoose.Types.ObjectId): Promise<IChange | null>;
@@ -19,7 +19,7 @@ export interface IChangeRepository {
 export class ChangeRepository implements IChangeRepository {
   async saveChange(
     queueObjectId: mongoose.Types.ObjectId,
-    changeEvent: QueueStateChange,
+    changeEvent: TripStateChange,
     createdAt?: Date
   ): Promise<mongoose.Types.ObjectId> {
     const changeData: any = {

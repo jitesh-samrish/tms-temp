@@ -1,4 +1,4 @@
-import { ISession } from 'qms-common-db/schemas/session.schema';
+import { ISession } from 'tms-common-db';
 import { SessionModel } from '../models/Sessiong.model';
 import { Logger } from '../utils/Logger';
 import mongoose from 'mongoose';
@@ -8,7 +8,7 @@ const logger = Logger.create('SessionRepository');
 export interface ISessionRepository {
   createSession(
     userId: string,
-    deviceInfo?: Record<string, any>,
+    deviceId: string,
     appVersion?: string,
     appName?: string,
     expiresAt?: Date
@@ -21,27 +21,27 @@ export interface ISessionRepository {
 
 export class SessionRepository implements ISessionRepository {
   /**
-   * Create a new session for a user
+   * Create a new session for a user with deviceId
    */
   async createSession(
     userId: string,
-    deviceInfo?: Record<string, any>,
+    deviceId: string,
     appVersion?: string,
     appName?: string,
     expiresAt?: Date
   ): Promise<ISession> {
     const session = new SessionModel({
-      user_id: new mongoose.Types.ObjectId(userId),
+      userId: new mongoose.Types.ObjectId(userId),
+      deviceId: new mongoose.Types.ObjectId(deviceId),
       status: 'ACTIVE',
-      device_info: deviceInfo,
-      app_version: appVersion,
-      app_name: appName,
-      expired_at: expiresAt,
+      appVersion: appVersion,
+      appName: appName,
+      expiredAt: expiresAt,
     });
 
     await session.save();
     logger.info(
-      `Session created for user: ${userId}, sessionId: ${session._id}`
+      `Session created for user: ${userId}, deviceId: ${deviceId}, sessionId: ${session._id}`
     );
     return session;
   }
@@ -58,7 +58,7 @@ export class SessionRepository implements ISessionRepository {
    */
   async getActiveSessionsByUserId(userId: string): Promise<ISession[]> {
     return await SessionModel.find({
-      user_id: new mongoose.Types.ObjectId(userId),
+      userId: new mongoose.Types.ObjectId(userId),
       status: 'ACTIVE',
     }).exec();
   }
@@ -72,7 +72,7 @@ export class SessionRepository implements ISessionRepository {
 
     await SessionModel.updateOne(
       { _id: sessionId },
-      { $set: { status: 'INACTIVE', expired_at: new Date() } }
+      { $set: { status: 'INACTIVE', expiredAt: new Date() } }
     );
     logger.info(`Session invalidated: ${sessionId}`);
 
@@ -84,8 +84,8 @@ export class SessionRepository implements ISessionRepository {
    */
   async invalidateAllUserSessions(userId: string): Promise<void> {
     await SessionModel.updateMany(
-      { user_id: new mongoose.Types.ObjectId(userId), status: 'ACTIVE' },
-      { $set: { status: 'INACTIVE', expired_at: new Date() } }
+      { userId: new mongoose.Types.ObjectId(userId), status: 'ACTIVE' },
+      { $set: { status: 'INACTIVE', expiredAt: new Date() } }
     );
     logger.info(`All sessions invalidated for user: ${userId}`);
   }

@@ -1,5 +1,5 @@
-import { QueueState } from '../dto/QueueState';
-import { QueueStateChange } from '../dto/QueueStateChange';
+import { TripState } from '../dto/TripState';
+import { TripStateChange } from '../dto/TripStateChange';
 import { Command } from '../dto/Command';
 import { IChangeRepository } from '../repositories/ChangeRepository';
 
@@ -8,9 +8,9 @@ export interface CommandExecutor {
   // Executor creates and saves the change entity
   // Returns both the updated state and the change event
   executeCommand(
-    queueState: QueueState | undefined,
+    tripState: TripState | undefined,
     command: Command,
     changeRepository: IChangeRepository,
     version: number
-  ): Promise<{ queueState: QueueState; change: QueueStateChange }>;
+  ): Promise<{ tripState: TripState; change: TripStateChange }>;
 }
