@@ -9,8 +9,8 @@ export interface ITripPlanRepository {
     name: string,
     description: string | undefined,
     createdBy: string,
-    startTimeMinutes: number,
-    endTimeMinutes: number,
+    startTime: number,
+    endTime: number,
     dateRanges: Array<{ startDate: Date; endDate: Date }>
   ): Promise<ITripPlan>;
   getTripPlanById(tripPlanId: string): Promise<ITripPlan | null>;
@@ -19,8 +19,8 @@ export interface ITripPlanRepository {
     updateData: {
       name?: string;
       description?: string;
-      startTimeMinutes?: number;
-      endTimeMinutes?: number;
+      startTime?: number;
+      endTime?: number;
       dateRanges?: Array<{ startDate: Date; endDate: Date }>;
     }
   ): Promise<ITripPlan | null>;
@@ -34,8 +34,8 @@ export class TripPlanRepository implements ITripPlanRepository {
     name: string,
     description: string | undefined,
     createdBy: string,
-    startTimeMinutes: number,
-    endTimeMinutes: number,
+    startTime: number,
+    endTime: number,
     dateRanges: Array<{ startDate: Date; endDate: Date }>
   ): Promise<ITripPlan> {
     const newTripPlan = new TripPlanModel({
@@ -43,8 +43,8 @@ export class TripPlanRepository implements ITripPlanRepository {
       description,
       createdBy: new mongoose.Types.ObjectId(createdBy),
       updatedBy: new mongoose.Types.ObjectId(createdBy),
-      startTimeMinutes,
-      endTimeMinutes,
+      startTime,
+      endTime,
       dateRanges,
     });
 
@@ -63,9 +63,10 @@ export class TripPlanRepository implements ITripPlanRepository {
     updateData: {
       name?: string;
       description?: string;
-      startTimeMinutes?: number;
-      endTimeMinutes?: number;
+      startTime?: number;
+      endTime?: number;
       dateRanges?: Array<{ startDate: Date; endDate: Date }>;
+      updatedBy?: string;
     }
   ): Promise<ITripPlan | null> {
     if (!mongoose.Types.ObjectId.isValid(tripPlanId)) return null;

@@ -13,3 +13,4 @@ export {
 } from './FailedStreamEvent.model';
 export { DeviceModel, IDevice } from './Device.model';
 export { SessionModel } from './Sessiong.model';
+export { PassengerModel, IPassenger } from './Passenger.model';
