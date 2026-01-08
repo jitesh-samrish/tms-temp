@@ -14,3 +14,7 @@ export {
 export { DeviceModel, IDevice } from './Device.model';
 export { SessionModel } from './Sessiong.model';
 export { PassengerModel, IPassenger } from './Passenger.model';
+export { default as DriverModel } from './Driver.model';
+export { default as DriverAssociationTokenModel } from './DriverAssociationToken.model';
+export { default as DeviceDriverModel } from './DeviceDriver.model';
+export { default as TripDriverModel } from './TripDriver.model';
