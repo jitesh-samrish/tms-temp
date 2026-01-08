@@ -1,5 +1,11 @@
 import mongoose from 'mongoose';
-import { ChangeSchema, IChange } from 'tms-common-db/schemas/change.schema';
+import {
+  TripChangeSchema,
+  ITripChange,
+} from 'tms-common-db/schemas/tripChange.schema';
 
-export { IChange };
-export const ChangeModel = mongoose.model<IChange>('Change', ChangeSchema);
+export { ITripChange as IChange };
+export const ChangeModel = mongoose.model<ITripChange>(
+  'Change',
+  TripChangeSchema
+);
