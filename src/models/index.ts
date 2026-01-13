@@ -16,5 +16,13 @@ export { SessionModel } from './Sessiong.model';
 export { PassengerModel, IPassenger } from './Passenger.model';
 export { default as DriverModel } from './Driver.model';
 export { default as DriverAssociationTokenModel } from './DriverAssociationToken.model';
-export { default as DeviceDriverModel } from './DeviceDriver.model';
+export { default as DriverDeviceModel } from './DriverDevice.model';
 export { default as TripDriverModel } from './TripDriver.model';
+export { VehicleModel, IVehicle } from './Vehicle.model';
+export { VehicleDeviceModel, IVehicleDevice } from './VehicleDevice.model';
+export { VehicleTripModel, IVehicleTrip } from './VehicleTrip.model';
+export { DeviceMatrix, IDeviceMatrix } from './DeviceMatrix.model';
+export {
+  ProcessedDeviceMatrix,
+  IProcessedDeviceMatrix,
+} from './ProcessedDeviceMatrix.model';

@@ -11,13 +11,14 @@ import { registerAllExecutors } from './config/executors';
 const logger = Logger.create('Server');
 
 const app = express();
-app.use(
-  cors({
-    origin: ServerConfig.ALLOWED_ORIGINS,
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  })
-);
+// app.use(
+//   cors({
+//     origin: ServerConfig.ALLOWED_ORIGINS,
+//     methods: ['GET', 'POST', 'PUT', 'DELETE'],
+//     allowedHeaders: ['Content-Type', 'Authorization'],
+//   })
+// );
+app.use(cors());
 app.use(express.json());
 
 // Log all requests and responses

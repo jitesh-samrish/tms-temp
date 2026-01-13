@@ -1,4 +1,4 @@
-import Redis from 'ioredis';
+import Redis, { RedisOptions } from 'ioredis';
 import { Logger } from '../utils/Logger';
 
 const logger = Logger.create('RedisClient');
@@ -22,3 +22,15 @@ export class RedisClient {
     return this.instance;
   }
 }
+
+export const redisConnectionOptions: RedisOptions = {
+  host: process.env.REDIS_HOST || 'localhost',
+  port: parseInt(process.env.REDIS_PORT || '6379'),
+  password: process.env.REDIS_PASSWORD,
+  maxRetriesPerRequest: null, // Required for BullMQ
+  enableReadyCheck: false,
+  retryStrategy: (times: number) => {
+    const delay = Math.min(times * 50, 2000);
+    return delay;
+  },
+};

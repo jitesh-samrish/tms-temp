@@ -1,0 +1,140 @@
+┌─────────────────────────────────────────────────────────────────┐
+│                         API REQUEST                              │
+│  POST /api/v1/matrix                                            │
+│  Body: { deviceId, coordinates, tripId?, metadata? }            │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              1. VALIDATION (Zod Schema)                          │
+│  • Validates deviceId format (24-char hex)                      │
+│  • Validates lat (-90 to 90) & lng (-180 to 180)                │
+│  • Validates optional tripId                                     │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│            2. MATRIX CONTROLLER                                  │
+│  MatrixController.storeDeviceMatrix()                           │
+│  • Receives validated request                                   │
+│  • Calls MatrixService                                          │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│            3. MATRIX SERVICE                                     │
+│  MatrixService.storeDeviceMatrix()                              │
+│  • Orchestrates the storage and queuing                         │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│            4. MATRIX REPOSITORY                                  │
+│  MatrixRepository.createDeviceMatrix()                          │
+│  • Creates new DeviceMatrix document                            │
+│  • Saves RAW GPS data to MongoDB (device_matrices collection)   │
+│  • Timestamp: Current time                                      │
+│  • Returns the saved document                                   │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│            5. QUEUE SERVICE                                      │
+│  queueService.addJob(rawMatrixId)                               │
+│  • Creates BullMQ job with the matrix ID                        │
+│  • Job ID = rawMatrixId (prevents duplicates)                   │
+│  • Adds job to 'track-processing' queue in Redis               │
+│  • Returns jobId for tracking                                   │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   API RESPONSE                                   │
+│  Status: 201 Created                                            │
+│  {                                                              │
+│    success: true,                                               │
+│    message: "Device matrix stored and queued for processing",   │
+│    data: {                                                      │
+│      matrixId: "...",                                           │
+│      deviceId: "...",                                           │
+│      coordinates: { lat, lng },                                 │
+│      timestamp: "...",                                          │
+│      jobId: "..."                                               │
+│    }                                                            │
+│  }                                                              │
+└─────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+        BACKGROUND PROCESSING (Worker Process)
+═══════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────┐
+│            6. WORKER PICKS UP JOB                                │
+│  TrackProcessorWorker                                           │
+│  • Runs in separate process/container                           │
+│  • Polls Redis queue for new jobs                              │
+│  • Concurrency: 10 workers (configurable)                       │
+│  • Rate limit: 100 jobs/second                                  │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│            7. FETCH RAW MATRIX                                   │
+│  • Query DeviceMatrix by ID                                     │
+│  • Get the raw GPS coordinates                                  │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│            8. FETCH LAST PROCESSED LOCATION                      │
+│  • Query ProcessedDeviceMatrix                                  │
+│  • Filter: deviceId = current device                            │
+│  • Sort: timestamp DESC                                         │
+│  • Limit: 1                                                     │
+│  • Gets the last known filtered location                        │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+                    ┌────┴────┐
+                    │ Exists? │
+                    └────┬────┘
+                         │
+        ┌────────────────┼────────────────┐
+        │ NO                               │ YES
+        ▼                                  ▼
+┌───────────────────┐         ┌─────────────────────────────────┐
+│  First Point      │         │  9. FILTERING LOGIC              │
+│  Save immediately │         │  • Check if out-of-order (skip)  │
+│  No filtering     │         │  • Calculate distance from last  │
+└───────────────────┘         └────────────┬────────────────────┘
+                                           │
+                                           ▼
+                                   ┌───────────────┐
+                                   │ Distance < 5m?│
+                                   └───────┬───────┘
+                                           │
+                              ┌────────────┼────────────┐
+                              │ YES                     │ NO
+                              ▼                         ▼
+                    ┌──────────────────┐    ┌──────────────────────┐
+                    │ 10. STOP DETECTED│    │ 11. KALMAN SMOOTHING │
+                    │ • Don't save new │    │ • Pass coords through│
+                    │ • Update metadata│    │   Kalman filter      │
+                    │   lastSeen       │    │ • Reduces GPS noise  │
+                    │   stopCount++    │    │ • Returns filtered   │
+                    └──────────────────┘    │   coordinates        │
+                                            └──────────┬───────────┘
+                                                       │
+                                                       ▼
+                                            ┌──────────────────────┐
+                                            │ 12. SAVE PROCESSED   │
+                                            │ • Save to            │
+                                            │   ProcessedDevice    │
+                                            │   Matrix collection  │
+                                            │ • Include metadata:  │
+                                            │   - distance         │
+                                            │   - speed            │
+                                            │   - filtered: true   │
+                                            │   - rawMatrixId      │
+                                            │   - processedAt      │
+                                            └──────────────────────┘

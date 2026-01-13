@@ -1,23 +1,23 @@
 import mongoose from 'mongoose';
-import DeviceDriverModel from '../models/DeviceDriver.model';
-import { IDeviceDriver } from 'tms-common-db/schemas/driverDeviceSchema';
+import DriverDeviceModel from '../models/DriverDevice.model';
+import { IDriverDevice } from 'tms-common-db/schemas/driverDeviceSchema';
 
 export interface IDeviceDriverRepository {
   createAssociation(
     deviceId: mongoose.Types.ObjectId,
     driverId: mongoose.Types.ObjectId,
     associatedAt?: Date
-  ): Promise<IDeviceDriver>;
+  ): Promise<IDriverDevice>;
   getActiveAssociationByDriver(
     driverId: mongoose.Types.ObjectId
-  ): Promise<IDeviceDriver | null>;
+  ): Promise<IDriverDevice | null>;
   getActiveAssociationByDevice(
     deviceId: mongoose.Types.ObjectId
-  ): Promise<IDeviceDriver | null>;
+  ): Promise<IDriverDevice | null>;
   disassociateDevice(
     associationId: mongoose.Types.ObjectId,
     disassociatedAt?: Date
-  ): Promise<IDeviceDriver | null>;
+  ): Promise<IDriverDevice | null>;
   disassociateAllForDriver(
     driverId: mongoose.Types.ObjectId,
     disassociatedAt?: Date
@@ -29,8 +29,8 @@ export class DeviceDriverRepository implements IDeviceDriverRepository {
     deviceId: mongoose.Types.ObjectId,
     driverId: mongoose.Types.ObjectId,
     associatedAt?: Date
-  ): Promise<IDeviceDriver> {
-    const association = new DeviceDriverModel({
+  ): Promise<IDriverDevice> {
+    const association = new DriverDeviceModel({
       deviceId,
       driverId,
       associatedAt: associatedAt || new Date(),
@@ -41,8 +41,8 @@ export class DeviceDriverRepository implements IDeviceDriverRepository {
 
   async getActiveAssociationByDriver(
     driverId: mongoose.Types.ObjectId
-  ): Promise<IDeviceDriver | null> {
-    return await DeviceDriverModel.findOne({
+  ): Promise<IDriverDevice | null> {
+    return await DriverDeviceModel.findOne({
       driverId,
       disassociatedAt: null,
     }).sort({ associatedAt: -1 });
@@ -50,8 +50,8 @@ export class DeviceDriverRepository implements IDeviceDriverRepository {
 
   async getActiveAssociationByDevice(
     deviceId: mongoose.Types.ObjectId
-  ): Promise<IDeviceDriver | null> {
-    return await DeviceDriverModel.findOne({
+  ): Promise<IDriverDevice | null> {
+    return await DriverDeviceModel.findOne({
       deviceId,
       disassociatedAt: null,
     }).sort({ associatedAt: -1 });
@@ -60,8 +60,8 @@ export class DeviceDriverRepository implements IDeviceDriverRepository {
   async disassociateDevice(
     associationId: mongoose.Types.ObjectId,
     disassociatedAt?: Date
-  ): Promise<IDeviceDriver | null> {
-    return await DeviceDriverModel.findByIdAndUpdate(
+  ): Promise<IDriverDevice | null> {
+    return await DriverDeviceModel.findByIdAndUpdate(
       associationId,
       { disassociatedAt: disassociatedAt || new Date() },
       { new: true }
@@ -72,7 +72,7 @@ export class DeviceDriverRepository implements IDeviceDriverRepository {
     driverId: mongoose.Types.ObjectId,
     disassociatedAt?: Date
   ): Promise<number> {
-    const result = await DeviceDriverModel.updateMany(
+    const result = await DriverDeviceModel.updateMany(
       { driverId, disassociatedAt: null },
       { disassociatedAt: disassociatedAt || new Date() }
     );

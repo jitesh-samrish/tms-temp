@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GPS Tracker Simulator</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 20px;
+        max-width: 600px;
+        margin: 0 auto;
+      }
+      .card {
+        border: 1px solid #ccc;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+      }
+      .status {
+        font-weight: bold;
+        color: #555;
+      }
+      .log {
+        background: #f0f0f0;
+        padding: 10px;
+        height: 150px;
+        overflow-y: scroll;
+        font-family: monospace;
+        font-size: 12px;
+      }
+      button {
+        padding: 10px 20px;
+        cursor: pointer;
+        font-size: 16px;
+        margin-right: 10px;
+      }
+      button.start {
+        background-color: #28a745;
+        color: white;
+        border: none;
+      }
+      button.stop {
+        background-color: #dc3545;
+        color: white;
+        border: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>📍 GPS Device Simulator</h1>
+
+    <div class="card">
+      <h3>Configuration</h3>
+      <label>API URL:</label>
+      <input
+        type="text"
+        id="apiUrl"
+        value="http://localhost:8000/tms/v1/matrix"
+        style="width: 100%; padding: 5px; margin-bottom: 10px"
+      />
+
+      <label>Device Identifier:</label>
+      <input
+        type="text"
+        id="deviceIdentifier"
+        value="GPS-DEVICE-001"
+        style="width: 100%; padding: 5px"
+      />
+    </div>
+
+    <div class="card">
+      <h3>Controls</h3>
+      <p>
+        <button class="start" onclick="startRealGPS()">📡 Use Real GPS</button>
+        <button
+          class="start"
+          style="background-color: #007bff"
+          onclick="startSimulation()"
+        >
+          🏃 Simulate Walking
+        </button>
+        <button class="stop" onclick="stopTracking()">🛑 Stop</button>
+      </p>
+      <p class="status">Status: <span id="statusText">Idle</span></p>
+    </div>
+
+    <div class="log" id="logArea">Waiting to start...</div>
+
+    <script>
+      let intervalId = null;
+
+      // Mock Data for Simulation (Start at a fixed point)
+      let simLat = 28.6139;
+      let simLng = 77.209;
+      let angle = 0;
+
+      function log(msg) {
+        const el = document.getElementById('logArea');
+        el.innerHTML =
+          `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>` +
+          el.innerHTML;
+      }
+
+      async function sendData(lat, lng, speed = 0) {
+        const apiUrl = document.getElementById('apiUrl').value;
+        const deviceIdentifier =
+          document.getElementById('deviceIdentifier').value;
+
+        // Construct payload matching your IDeviceMatrix interface
+        const payload = {
+          timestamp: new Date().toISOString(),
+          deviceIdentifier: deviceIdentifier,
+          // tripId is now auto-resolved by backend
+          coordinates: {
+            latitude: lat,
+            longitude: lng,
+          },
+          metadata: {
+            speed: speed, // m/s
+            accuracy: 5.0, // meters
+            batteryLevel: 98,
+          },
+        };
+
+        try {
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+
+          if (response.ok) {
+            log(`Sent: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+          } else {
+            log(`Error: Server responded ${response.status}`);
+          }
+        } catch (err) {
+          log(`Network Error: Is server running?`);
+        }
+      }
+
+      // --- MODE 1: Real Browser GPS ---
+      function startRealGPS() {
+        if (intervalId) stopTracking();
+        document.getElementById('statusText').innerText =
+          'Running (Real GPS)...';
+
+        if (!navigator.geolocation) {
+          alert('Geolocation is not supported by your browser');
+          return;
+        }
+
+        // Send data every 3 seconds
+        intervalId = setInterval(() => {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              const { latitude, longitude, speed } = position.coords;
+              // Browser often returns null for speed if stationary, default to 0
+              sendData(latitude, longitude, speed || 0);
+            },
+            (error) => log(`GPS Error: ${error.message}`)
+          );
+        }, 3000);
+      }
+
+      // --- MODE 2: Simulation (Walking in a circle) ---
+      function startSimulation() {
+        if (intervalId) stopTracking();
+        document.getElementById('statusText').innerText =
+          'Running (Simulating Movement)...';
+
+        // Move every 2 seconds
+        intervalId = setInterval(() => {
+          // Math logic to move in a small circle approx 100m radius
+          // 0.001 degrees is roughly 111 meters
+          simLat += Math.sin(angle) * 0.0001;
+          simLng += Math.cos(angle) * 0.0001;
+          angle += 0.1; // Change direction slightly
+
+          // Simulate walking speed (1.4 m/s)
+          sendData(simLat, simLng, 1.4);
+        }, 2000);
+      }
+
+      function stopTracking() {
+        if (intervalId) clearInterval(intervalId);
+        intervalId = null;
+        document.getElementById('statusText').innerText = 'Stopped';
+        log('Tracking stopped.');
+      }
+    </script>
+  </body>
+</html>

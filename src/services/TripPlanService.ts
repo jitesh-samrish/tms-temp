@@ -94,9 +94,9 @@ export class TripPlanService implements ITripPlanService {
       endTime = sortedSchedule[sortedSchedule.length - 1].arrivalTime;
     }
 
-    console.log('Converted Date Ranges:', convertedDateRanges);
-    console.log('Start Time:', startTime);
-    console.log('End Time:', endTime);
+    logger.info('Converted Date Ranges:', convertedDateRanges);
+    logger.info('Start Time:', startTime);
+    logger.info('End Time:', endTime);
 
     // Create ACL with creator as ADMIN
     const acl = [{ userId, role: 'ADMIN' }];

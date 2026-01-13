@@ -8,7 +8,6 @@ import {
 } from '../utils/errors';
 import { Command } from '../dto/Command';
 import { Logger } from '../utils/Logger';
-import mongoose from 'mongoose';
 import { IChangeRepository } from '../repositories/ChangeRepository';
 
 const logger = Logger.create('TripService');
