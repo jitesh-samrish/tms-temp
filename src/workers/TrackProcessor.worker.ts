@@ -8,6 +8,7 @@ import { DeviceMatrix } from '../models/DeviceMatrix.model';
 import { ProcessedDeviceMatrix } from '../models/ProcessedDeviceMatrix.model';
 import { calculateDistance } from '../utils/geo.util';
 import { kalmanService } from '../services/KalmanService';
+import { osrmService } from '../services/OsrmService';
 import { Logger } from '../utils/Logger';
 import { redisConnectionOptions } from '../config/RedisClient';
 
@@ -22,6 +23,17 @@ const STOP_THRESHOLD_METERS = 5;
  * Maximum age of last known location to consider (in seconds)
  */
 const MAX_LAST_LOCATION_AGE_SECONDS = 300; // 5 minutes
+
+/**
+ * Number of recent points to use for OSRM map matching context
+ */
+const OSRM_CONTEXT_POINTS = 10;
+
+/**
+ * Minimum confidence threshold to use OSRM matched coordinates (0-1)
+ * If confidence is below this, fall back to Kalman filter
+ */
+const OSRM_MIN_CONFIDENCE = 0.5;
 
 /**
  * Process a track record
@@ -122,27 +134,124 @@ async function processTrack(job: Job<TrackProcessingJobData>) {
       return { action: 'stop_detected', rawMatrixId, distance };
     }
 
-    // 6. Smoothing: Pass the raw coordinates through the KalmanService
+    // 6. Smoothing Pipeline: Kalman → OSRM
     const deviceIdStr = rawMatrix.deviceId.toString();
-    const filteredCoordinates = kalmanService.filter(deviceIdStr, {
+    let finalCoordinates: { latitude: number; longitude: number };
+    let processingMethod = 'kalman'; // Default to Kalman
+    let matchingConfidence = 0;
+
+    // STEP 1: Always apply Kalman filter first to smooth the raw noisy data
+    const kalmanSmoothedCoordinates = kalmanService.filter(deviceIdStr, {
       latitude: rawMatrix.coordinates.latitude,
       longitude: rawMatrix.coordinates.longitude,
     });
 
+    logger.debug(
+      `Kalman smoothed: (${rawMatrix.coordinates.latitude.toFixed(
+        6
+      )}, ${rawMatrix.coordinates.longitude.toFixed(
+        6
+      )}) → (${kalmanSmoothedCoordinates.latitude.toFixed(
+        6
+      )}, ${kalmanSmoothedCoordinates.longitude.toFixed(6)})`
+    );
+
+    // STEP 2: Attempt OSRM map matching using the cleaned (Kalman-smoothed) data
+    try {
+      // Get recent processed points for context (these already have smoothed coordinates)
+      const recentPoints = await getRecentPoints(
+        rawMatrix.deviceId,
+        OSRM_CONTEXT_POINTS - 1
+      );
+
+      // Build the points array for OSRM using SMOOTHED coordinates (not raw!)
+      const pointsForMatching = [
+        ...recentPoints.reverse().map((p) => ({
+          lat: p.coordinates.latitude, // These are already smoothed from previous processing
+          lng: p.coordinates.longitude,
+          timestamp: p.timestamp,
+          accuracy: p.metadata?.accuracy,
+        })),
+        // Add current Kalman-smoothed point at the end
+        {
+          lat: kalmanSmoothedCoordinates.latitude,
+          lng: kalmanSmoothedCoordinates.longitude,
+          timestamp: rawMatrix.timestamp,
+          accuracy: rawMatrix.metadata?.accuracy,
+        },
+      ];
+
+      // Only attempt OSRM matching if we have enough points
+      if (pointsForMatching.length >= 3) {
+        logger.debug(
+          `Attempting OSRM map matching with ${pointsForMatching.length} smoothed points for device ${deviceIdStr}`
+        );
+
+        const matchedPoints = await osrmService.matchPath(pointsForMatching);
+        const currentMatchedPoint = matchedPoints[matchedPoints.length - 1];
+
+        // STEP 3: Use OSRM result only if confidence is high enough
+        if (currentMatchedPoint.confidence >= OSRM_MIN_CONFIDENCE) {
+          finalCoordinates = {
+            latitude: currentMatchedPoint.lat,
+            longitude: currentMatchedPoint.lng,
+          };
+          processingMethod = 'osrm'; // OSRM successfully snapped to road
+          matchingConfidence = currentMatchedPoint.confidence;
+
+          logger.debug(
+            `OSRM match successful with confidence ${matchingConfidence.toFixed(
+              2
+            )}, using road-snapped coordinates`
+          );
+        } else {
+          // Low confidence: Keep the Kalman-smoothed coordinates
+          logger.debug(
+            `OSRM confidence too low (${currentMatchedPoint.confidence.toFixed(
+              2
+            )}), keeping Kalman-smoothed coordinates`
+          );
+          finalCoordinates = kalmanSmoothedCoordinates;
+          processingMethod = 'kalman'; // Kalman only (OSRM rejected)
+          matchingConfidence = currentMatchedPoint.confidence;
+        }
+      } else {
+        // Not enough points for OSRM, use Kalman-smoothed coordinates
+        logger.debug(
+          `Not enough points (${pointsForMatching.length}) for OSRM, using Kalman-smoothed coordinates`
+        );
+        finalCoordinates = kalmanSmoothedCoordinates;
+        processingMethod = 'kalman';
+      }
+    } catch (error) {
+      // On any OSRM error, fall back to Kalman-smoothed coordinates
+      logger.warn(
+        `OSRM map matching failed for device ${deviceIdStr}, using Kalman-smoothed coordinates:`,
+        error
+      );
+      finalCoordinates = kalmanSmoothedCoordinates;
+      processingMethod = 'kalman_fallback';
+    }
+
     // 7. Save the final result to ProcessedDeviceMatrix
-    await saveProcessedMatrix(rawMatrix, filteredCoordinates, {
+    await saveProcessedMatrix(rawMatrix, finalCoordinates, {
       distance,
       timeDiffSeconds,
       speed: distance / timeDiffSeconds, // m/s
-      filtered: true,
+      processingMethod,
+      matchingConfidence,
     });
 
     logger.info(
       `Processed point for device ${
         rawMatrix.deviceId
-      }, distance: ${distance.toFixed(2)}m, speed: ${(
+      } using ${processingMethod}, distance: ${distance.toFixed(2)}m, speed: ${(
         distance / timeDiffSeconds
-      ).toFixed(2)}m/s`
+      ).toFixed(2)}m/s${
+        matchingConfidence > 0
+          ? `, confidence: ${matchingConfidence.toFixed(2)}`
+          : ''
+      }`
     );
 
     return {
@@ -150,11 +259,26 @@ async function processTrack(job: Job<TrackProcessingJobData>) {
       rawMatrixId,
       distance,
       speed: distance / timeDiffSeconds,
+      processingMethod,
+      matchingConfidence,
     };
   } catch (error) {
     logger.error(`Error processing track ${rawMatrixId}:`, error);
     throw error; // Re-throw to trigger retry mechanism
   }
+}
+
+/**
+ * Get recent processed points for map matching context
+ */
+async function getRecentPoints(
+  deviceId: mongoose.Types.ObjectId,
+  limit: number
+): Promise<any[]> {
+  return await ProcessedDeviceMatrix.find({ deviceId })
+    .sort({ timestamp: -1 })
+    .limit(limit)
+    .lean();
 }
 
 /**

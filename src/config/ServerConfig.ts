@@ -20,4 +20,5 @@ export const ServerConfig = {
     : 5044,
   SERVICE_NAME: process.env.SERVICE_NAME || 'TMSStateManagementService',
   NODE_ENV: process.env.NODE_ENV || 'development',
+  OSRM_BASE_URL: process.env.OSRM_BASE_URL || 'http://localhost:7000',
 };
