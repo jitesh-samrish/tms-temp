@@ -1,6 +1,7 @@
 # GPS Coordinate Processing Pipeline Documentation
 
 ## Table of Contents
+
 1. [Overview](#overview)
 2. [System Architecture](#system-architecture)
 3. [Complete Processing Flow](#complete-processing-flow)
@@ -16,6 +17,7 @@
 This document describes the complete GPS tracking data processing pipeline from raw coordinate ingestion through API to final storage in the database. The system processes real-time GPS coordinates from mobile devices, applies intelligent filtering and map-matching algorithms to produce accurate, road-snapped location data.
 
 ### Primary Goals
+
 - **Accuracy**: Snap GPS coordinates to actual road networks
 - **Smoothness**: Eliminate GPS noise and jitter
 - **Efficiency**: Process thousands of coordinates per second
@@ -87,13 +89,14 @@ This document describes the complete GPS tracking data processing pipeline from 
 **What Happens**: Mobile device sends GPS coordinate via REST API
 
 **Input Data Structure**:
+
 ```json
 {
   "deviceId": "ObjectId",
   "timestamp": "2026-01-14T10:30:45.123Z",
   "coordinates": {
     "latitude": 28.612912,
-    "longitude": 77.229510
+    "longitude": 77.22951
   },
   "metadata": {
     "accuracy": 12.5,
@@ -104,6 +107,7 @@ This document describes the complete GPS tracking data processing pipeline from 
 ```
 
 **Actions**:
+
 1. API validates the payload
 2. Creates a `DeviceMatrix` document (raw storage)
 3. Adds a job to BullMQ processing queue
@@ -118,10 +122,11 @@ This document describes the complete GPS tracking data processing pipeline from 
 **What Happens**: Worker picks up the job from Redis queue
 
 **Queue Configuration**:
+
 - **Queue Name**: `device-matrix-processing`
 - **Concurrency**: 10 workers (configurable via `WORKER_CONCURRENCY`)
 - **Rate Limit**: 100 jobs/second
-- **Retry Policy**: 
+- **Retry Policy**:
   - Max Attempts: 3
   - Backoff Strategy: Exponential (2s, 4s, 8s)
 - **Job Deduplication**: Uses `rawMatrixId` as unique job ID
@@ -133,13 +138,16 @@ This document describes the complete GPS tracking data processing pipeline from 
 ### Step 3: Validation & Initial Filtering
 
 #### 3.1 Raw Data Retrieval
+
 ```typescript
 const rawMatrix = await DeviceMatrix.findById(rawMatrixId);
 ```
+
 - Fetches the raw coordinate document
 - **Failure Condition**: If document not found → Job fails and retries
 
 #### 3.2 First Point Check
+
 ```typescript
 if (!lastProcessed) {
   // Save immediately without processing
@@ -170,6 +178,7 @@ if (timeDiffSeconds < 0) {
 **Action**: If older → Skip processing (prevents state corruption)
 
 **Example Scenario**:
+
 ```
 Last Processed: 10:30:00
 Current Point:  10:29:55  ← 5 seconds older
@@ -195,6 +204,7 @@ if (lastProcessedAge > MAX_LAST_LOCATION_AGE_SECONDS) {
 **Action**: If gap > 5 minutes → Reset Kalman filter, save raw coordinates
 
 **Example Scenarios**:
+
 ```
 Scenario 1: Continuous Tracking
 Last Point: 10:30:00
@@ -223,12 +233,14 @@ if (distance < STOP_THRESHOLD_METERS) {
 **How**: Calculate haversine distance from last processed point  
 **Action**: If distance < 5m → Update `lastSeen` timestamp on existing point
 
-**Purpose**: 
+**Purpose**:
+
 - Reduces storage (no duplicate points)
 - Maintains "device is here" status
 - Tracks stop duration via `stopCount` metadata
 
 **Example**:
+
 ```
 Point 1: (28.612912, 77.229510) at 10:00:00
 Point 2: (28.612915, 77.229512) at 10:00:30  → 3.2m distance
@@ -258,12 +270,14 @@ A **Kalman Filter** is a mathematical algorithm that estimates the true state of
 ##### Why We Use Kalman Filtering
 
 **Problem**: Raw GPS has inherent noise:
+
 - Signal reflection (multipath interference)
 - Atmospheric delays
 - Satellite geometry
 - Typical accuracy: ±5-50 meters
 
 **Solution**: Kalman filter combines:
+
 1. **Previous State** (where we think the device was)
 2. **Current Measurement** (where GPS says it is)
 3. **Motion Model** (how we expect it to move)
@@ -273,6 +287,7 @@ Result: More accurate estimate than either alone.
 ##### How Kalman Filtering Works
 
 **Algorithm**:
+
 ```
 1. Prediction Step:
    predicted_position = previous_position + process_noise
@@ -280,7 +295,7 @@ Result: More accurate estimate than either alone.
 2. Update Step:
    kalman_gain = uncertainty / (uncertainty + measurement_noise)
    final_position = predicted + kalman_gain × (measured - predicted)
-   
+
 3. Update Uncertainty:
    new_uncertainty = (1 - kalman_gain) × predicted_uncertainty
 ```
@@ -288,15 +303,17 @@ Result: More accurate estimate than either alone.
 **In Our Implementation**:
 
 ```typescript
-kalmanService.filter(deviceId, rawCoordinates)
+kalmanService.filter(deviceId, rawCoordinates);
 ```
 
 **Configuration**:
+
 - **Process Noise (Q)**: `0.001` - How much we trust our motion model
 - **Measurement Noise (R)**: `5.0` - How much we trust GPS sensor
 - **State**: Maintains separate filters for latitude & longitude
 
 **Per-Device State**: Each device has independent Kalman state stored in memory:
+
 ```typescript
 {
   deviceId: "abc123",
@@ -309,6 +326,7 @@ kalmanService.filter(deviceId, rawCoordinates)
 ```
 
 **Example Effect**:
+
 ```
 Raw GPS Sequence (noisy):
 Point 1: (28.6129, 77.2295)
@@ -336,11 +354,13 @@ Point 3: (28.6130, 77.2296)  ← Stable
 ##### Why We Use Map Matching
 
 **Problem**: Even Kalman-smoothed coordinates can be off the road:
+
 - GPS accuracy limits (5-10m typical)
 - Device might report position in a building next to the road
 - Multi-lane roads need precision
 
 **Solution**: OSRM uses:
+
 1. **Road Network Database** (OpenStreetMap data)
 2. **Hidden Markov Model** to find most likely driven path
 3. **Temporal sequence** to understand trajectory
@@ -350,23 +370,26 @@ Point 3: (28.6130, 77.2296)  ← Stable
 ##### How OSRM Map Matching Works
 
 **Input Requirements**:
+
 ```typescript
 interface MapMatchPoint {
-  lat: number;        // Latitude
-  lng: number;        // Longitude
-  timestamp: Date;    // When point was recorded
-  accuracy?: number;  // GPS accuracy in meters
+  lat: number; // Latitude
+  lng: number; // Longitude
+  timestamp: Date; // When point was recorded
+  accuracy?: number; // GPS accuracy in meters
 }
 ```
 
 **Context Window**: We use the last **10 points** (configurable via `OSRM_CONTEXT_POINTS`)
 
 **Why 10 Points?**
+
 - Too few (1-2): OSRM can't determine trajectory
 - Too many (50+): Performance degrades, old context irrelevant
 - 10 points: Optimal balance (~30-60 seconds of driving data)
 
 **URL Construction**:
+
 ```
 /match/v1/driving/77.2295,28.6129;77.2297,28.6131;77.2298,28.6133
                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -382,11 +405,13 @@ Query Parameters:
 ```
 
 **Radius Strategy**:
+
 - **First & Last Points**: 25 meters (more forgiving at trip boundaries)
 - **Middle Points**: Use GPS accuracy value or default to 15 meters
 - **Purpose**: Tells OSRM how far from each point to search for roads
 
 **Algorithm Process** (Inside OSRM):
+
 1. For each point, find candidate road segments within radius
 2. Build a state space graph of possible paths
 3. Use Viterbi algorithm (Hidden Markov Model) to find most likely path
@@ -397,6 +422,7 @@ Query Parameters:
    - Driving speed limits
 
 **Response Structure**:
+
 ```json
 {
   "code": "Ok",
@@ -430,7 +456,9 @@ Query Parameters:
 **What**: OSRM returns a confidence value (0.0 - 1.0) indicating match quality
 
 **Factors Affecting Confidence**:
+
 - **High Confidence (0.8-1.0)**:
+
   - Clear road network
   - Consistent trajectory
   - Good GPS accuracy
@@ -451,26 +479,27 @@ Query Parameters:
 
 ```typescript
 if (confidence >= 0.5) {
-  finalCoordinates = osrmMatchedCoordinates;  // Road-snapped
+  finalCoordinates = osrmMatchedCoordinates; // Road-snapped
   processingMethod = 'osrm';
 } else {
-  finalCoordinates = kalmanSmoothedCoordinates;  // Smooth but not snapped
+  finalCoordinates = kalmanSmoothedCoordinates; // Smooth but not snapped
   processingMethod = 'kalman';
 }
 ```
 
 **Decision Logic**:
 
-| Condition | Final Coordinates | Method | Use Case |
-|-----------|------------------|--------|----------|
-| OSRM confidence ≥ 0.5 | OSRM road-snapped | `osrm` | Normal road driving |
-| OSRM confidence < 0.5 | Kalman smoothed | `kalman` | Complex areas, intersections |
-| OSRM error/timeout | Kalman smoothed | `kalman_fallback` | OSRM service issues |
-| < 3 points available | Kalman smoothed | `kalman` | Insufficient context |
+| Condition             | Final Coordinates | Method            | Use Case                     |
+| --------------------- | ----------------- | ----------------- | ---------------------------- |
+| OSRM confidence ≥ 0.5 | OSRM road-snapped | `osrm`            | Normal road driving          |
+| OSRM confidence < 0.5 | Kalman smoothed   | `kalman`          | Complex areas, intersections |
+| OSRM error/timeout    | Kalman smoothed   | `kalman_fallback` | OSRM service issues          |
+| < 3 points available  | Kalman smoothed   | `kalman`          | Insufficient context         |
 
 **Why This Approach?**
 
 **Cascading Quality**:
+
 ```
 Best:   OSRM Matched (on road, smooth)       ← Use when confident
 Good:   Kalman Smoothed (smooth, may be off road)  ← Fallback
@@ -509,7 +538,7 @@ const processedMatrix = new ProcessedDeviceMatrix({
   deviceId: rawMatrix.deviceId,
   tripId: rawMatrix.tripId,
   coordinates: finalCoordinates,
-  metadata: { ...enrichedMetadata }
+  metadata: { ...enrichedMetadata },
 });
 
 await processedMatrix.save();
@@ -518,6 +547,7 @@ await processedMatrix.save();
 **Storage**: `ProcessedDeviceMatrix` collection in MongoDB
 
 **Result**: Clean, accurate, road-snapped coordinate ready for:
+
 - Real-time tracking displays
 - Route replay
 - Analytics and reporting
@@ -529,23 +559,24 @@ await processedMatrix.save();
 
 ### Critical Constants
 
-| Constant | Value | Purpose | Impact if Changed |
-|----------|-------|---------|-------------------|
-| `STOP_THRESHOLD_METERS` | 5m | Stop detection | Higher = Fewer points during slow movement |
-| `MAX_LAST_LOCATION_AGE_SECONDS` | 300s (5min) | Staleness check | Lower = More Kalman resets |
-| `OSRM_CONTEXT_POINTS` | 10 | OSRM input window | Higher = Better matching but slower |
-| `OSRM_MIN_CONFIDENCE` | 0.5 | Match acceptance | Higher = More Kalman fallbacks |
-| `WORKER_CONCURRENCY` | 10 | Parallel jobs | Higher = More throughput |
-| `QUEUE_RATE_LIMIT` | 100/sec | Job processing | Higher = Faster but more load |
+| Constant                        | Value       | Purpose           | Impact if Changed                          |
+| ------------------------------- | ----------- | ----------------- | ------------------------------------------ |
+| `STOP_THRESHOLD_METERS`         | 5m          | Stop detection    | Higher = Fewer points during slow movement |
+| `MAX_LAST_LOCATION_AGE_SECONDS` | 300s (5min) | Staleness check   | Lower = More Kalman resets                 |
+| `OSRM_CONTEXT_POINTS`           | 10          | OSRM input window | Higher = Better matching but slower        |
+| `OSRM_MIN_CONFIDENCE`           | 0.5         | Match acceptance  | Higher = More Kalman fallbacks             |
+| `WORKER_CONCURRENCY`            | 10          | Parallel jobs     | Higher = More throughput                   |
+| `QUEUE_RATE_LIMIT`              | 100/sec     | Job processing    | Higher = Faster but more load              |
 
 ### Kalman Filter Tuning
 
-| Parameter | Value | Meaning |
-|-----------|-------|---------|
-| Process Noise (Q) | 0.001 | Trust in motion model (lower = smoother) |
-| Measurement Noise (R) | 5.0 | Trust in GPS (higher = more smoothing) |
+| Parameter             | Value | Meaning                                  |
+| --------------------- | ----- | ---------------------------------------- |
+| Process Noise (Q)     | 0.001 | Trust in motion model (lower = smoother) |
+| Measurement Noise (R) | 5.0   | Trust in GPS (higher = more smoothing)   |
 
 **Tuning Guidelines**:
+
 - Increase Q → More responsive to changes (good for high-speed)
 - Decrease Q → Smoother (good for walking/stationary)
 - Increase R → More aggressive smoothing (use if GPS very noisy)
@@ -557,6 +588,7 @@ await processedMatrix.save();
 - **Middle Points**: GPS accuracy or 15m default
 
 **Why Variable Radius?**
+
 - Trip start/end often in parking lots (off road network)
 - Middle points likely on roads (tighter matching)
 
@@ -567,6 +599,7 @@ await processedMatrix.save();
 ### Failure Scenarios & Recovery
 
 #### 1. Raw Data Not Found
+
 ```
 Scenario: DeviceMatrix document deleted/missing
 Action:   Throw error → BullMQ retry (3 attempts)
@@ -575,6 +608,7 @@ Manual:   Review failed jobs, investigate data loss
 ```
 
 #### 2. OSRM Service Unavailable
+
 ```
 Scenario: http://localhost:7000 not responding
 Action:   Catch error → Use Kalman coordinates
@@ -584,6 +618,7 @@ Alert:    Log warning for monitoring
 ```
 
 #### 3. OSRM Returns NoMatch
+
 ```
 Scenario: Points too far from any road
 Action:   Return original points with confidence 0
@@ -592,6 +627,7 @@ Example:  Drone delivery, boat tracking, hiking
 ```
 
 #### 4. OSRM Returns NoSegment
+
 ```
 Scenario: Points on disconnected road segments
 Action:   Same as NoMatch
@@ -600,6 +636,7 @@ Example:  Ferry crossing, tunnel with GPS gap
 ```
 
 #### 5. Kalman State Corruption
+
 ```
 Scenario: Device state becomes inconsistent
 Trigger:  Stale last point (>5min old)
@@ -608,6 +645,7 @@ Result:   Next point treated as first point
 ```
 
 #### 6. Database Connection Loss
+
 ```
 Scenario: MongoDB connection drops
 Action:   BullMQ job throws error → Retry
@@ -616,6 +654,7 @@ Benefit:  Temporary network issues auto-recover
 ```
 
 #### 7. Out of Memory
+
 ```
 Scenario: Worker memory exhausted (too many Kalman states)
 Prevention: Kalman states in Map (garbage collected)
@@ -643,6 +682,7 @@ Tier 4: No Data                          ← Failure (retry/alert)
 ### Throughput Capacity
 
 **Queue Processing**:
+
 - Concurrency: 10 workers
 - Rate Limit: 100 jobs/second
 - **Theoretical Maximum**: 1,000 points/second
@@ -651,17 +691,20 @@ Tier 4: No Data                          ← Failure (retry/alert)
 ### Database Performance
 
 **Read Operations per Point**:
+
 - 1× DeviceMatrix read (raw data)
 - 1× Last processed point lookup
 - 1× Recent points query (10 points for OSRM)
 - **Total**: ~3 reads
 
 **Write Operations per Point**:
+
 - 1× ProcessedDeviceMatrix insert
 - 0-1× Update (stop detection case)
 - **Total**: 1-2 writes
 
 **Optimization**:
+
 - MongoDB indexes on `deviceId` and `timestamp`
 - Lean queries (no Mongoose hydration)
 - Compound index: `{deviceId: 1, timestamp: -1}`
@@ -671,11 +714,13 @@ Tier 4: No Data                          ← Failure (retry/alert)
 **Average Response Time**: 10-50ms per request
 
 **Optimization**:
+
 - Local OSRM instance (localhost:7000)
 - Pre-built routing graph (OpenStreetMap data)
 - No external API calls
 
 **Bottleneck**: If OSRM becomes slow:
+
 1. Monitor average response time
 2. Scale OSRM horizontally (multiple instances)
 3. Use OSRM load balancer
@@ -684,10 +729,12 @@ Tier 4: No Data                          ← Failure (retry/alert)
 ### Memory Usage
 
 **Per Device State**:
+
 - Kalman State: ~48 bytes (3 numbers)
 - 10,000 active devices = ~480 KB
 
 **Queue Memory**:
+
 - Job data: ~200 bytes per job
 - 1,000 pending jobs = ~200 KB
 
@@ -698,18 +745,22 @@ Tier 4: No Data                          ← Failure (retry/alert)
 **Key Performance Indicators**:
 
 1. **Processing Latency**: Time from ingestion to storage
+
    - Target: < 500ms per point
    - Alert: > 2 seconds
 
 2. **Queue Depth**: Pending jobs in BullMQ
+
    - Normal: < 100 jobs
    - Alert: > 1,000 jobs
 
 3. **OSRM Success Rate**: % of high-confidence matches
+
    - Target: > 70%
    - Alert: < 40%
 
 4. **Stop Detection Rate**: % of points marked as stops
+
    - Normal: 20-40% (urban driving)
    - Anomaly: > 80% (check thresholds)
 
@@ -726,40 +777,40 @@ Tier 4: No Data                          ← Failure (retry/alert)
 ```
 1. Mobile App GPS Sensor
    ↓ [Raw: 28.612945, 77.229532, accuracy: 12m]
-   
+
 2. REST API Ingestion
    ↓ [Validated, saved to DeviceMatrix]
-   
+
 3. BullMQ Queue
    ↓ [Job ID: matrix_123abc, Priority: 1]
-   
+
 4. Worker Picks Job
    ↓ [Concurrency slot available]
-   
+
 5. Validation Checks
    ├─ First Point? No
    ├─ Out of Order? No
    ├─ Stale? No (last point 15s ago)
    └─ Stop Detected? No (distance: 45m)
-   
+
 6. Kalman Filtering
    ↓ [Smoothed: 28.612940, 77.229528]
-   
+
 7. OSRM Map Matching
    ├─ Context: Last 9 points + current
    ├─ OSRM Call: /match/v1/driving/...
    ├─ Response: Confidence 0.87
    └─ Matched: 28.612935, 77.229525 (on road)
-   
+
 8. Final Selection
    ↓ [Confidence 0.87 ≥ 0.5 → Use OSRM coordinates]
-   
+
 9. Metadata Enrichment
    ↓ [distance: 45m, speed: 3m/s, method: 'osrm']
-   
+
 10. Persist to ProcessedDeviceMatrix
     ↓ [Saved: _id: 456def, method: 'osrm', confidence: 0.87]
-    
+
 11. Job Completion
     ✓ [Job marked complete, removed from queue]
 ```
@@ -855,6 +906,7 @@ Tier 4: No Data                          ← Failure (retry/alert)
 **Our Choice**: Keep both
 
 **Reasoning**:
+
 - **Audit Trail**: Can replay processing with different parameters
 - **Algorithm Improvement**: Reprocess historical data with better algorithms
 - **Debugging**: Compare raw vs processed to validate filters
@@ -867,6 +919,7 @@ Tier 4: No Data                          ← Failure (retry/alert)
 **Our Choice**: Asynchronous queue
 
 **Reasoning**:
+
 - **API Responsiveness**: Return 200 OK in <50ms (instead of 500ms)
 - **Retry Logic**: Automatic retries on failures
 - **Rate Limiting**: Prevent database overload during spikes
@@ -880,6 +933,7 @@ Tier 4: No Data                          ← Failure (retry/alert)
 **Our Choice**: Clean with Kalman first
 
 **Reasoning**:
+
 - **Better OSRM Results**: Clean input = better matching
 - **Lower OSRM Failures**: Fewer NoMatch responses
 - **Fallback Quality**: When OSRM fails, we have smooth coordinates
@@ -894,6 +948,7 @@ Tier 4: No Data                          ← Failure (retry/alert)
 **Our Choice**: Always apply Kalman
 
 **Reasoning**:
+
 - **Off-Road Scenarios**: Parking lots, private roads not in OSM
 - **OSRM Downtime**: Service unavailable → Still have quality data
 - **Edge Cases**: Complex intersections where OSRM struggles
@@ -906,12 +961,14 @@ Tier 4: No Data                          ← Failure (retry/alert)
 **Our Choice**: 10 points (~30-60 seconds)
 
 **Reasoning**:
+
 - **Trajectory Understanding**: Enough to determine direction/path
 - **Performance**: Fast OSRM response (<50ms)
 - **Memory Efficient**: Small query payload
 - **Relevance**: Older points less relevant for current position
 
 **Testing Results**:
+
 - 3 points: High NoMatch rate (25%)
 - 10 points: Optimal (5% NoMatch)
 - 50 points: Marginal improvement (4% NoMatch) but 3× slower
@@ -926,7 +983,7 @@ This GPS processing pipeline represents a sophisticated, production-ready system
 ✅ **Optimizes Quality**: Cascading algorithms (Kalman → OSRM → Decision)  
 ✅ **Scales Efficiently**: Queue-based, concurrent, rate-limited  
 ✅ **Maintains Reliability**: Multiple fallbacks, retry logic, data preservation  
-✅ **Enables Analytics**: Rich metadata, processing history, confidence scores  
+✅ **Enables Analytics**: Rich metadata, processing history, confidence scores
 
 The combination of Kalman filtering and OSRM map matching provides the best of both worlds: **noise reduction** + **road accuracy**, with intelligent fallbacks ensuring data quality under all conditions.
 
