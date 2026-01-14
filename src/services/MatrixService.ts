@@ -8,7 +8,7 @@ import { TripDriverRepository } from '../repositories/TripDriverRepository';
 import { VehicleTripRepository } from '../repositories/VehicleTripRepository';
 import { Logger } from '../utils/Logger';
 import { NotFoundException } from '../utils/errors';
-import queueService from './TrackProcessingQueueService';
+import queueService from './DeviceMatrixProcessingQueueService';
 
 const logger = Logger.create('MatrixService');
 

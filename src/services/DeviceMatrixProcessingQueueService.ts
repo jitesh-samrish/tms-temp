@@ -14,7 +14,7 @@ export interface TrackProcessingJobData {
 /**
  * Queue name constant
  */
-export const TRACK_PROCESSING_QUEUE = 'track-processing';
+export const DEVICE_MATRIX_PROCESSING_QUEUE = 'device-matrix-processing';
 
 /**
  * Queue options
@@ -45,7 +45,7 @@ class QueueService {
 
   constructor() {
     this.processingQueue = new Queue<TrackProcessingJobData>(
-      TRACK_PROCESSING_QUEUE,
+      DEVICE_MATRIX_PROCESSING_QUEUE,
       queueOptions
     );
 
@@ -61,7 +61,7 @@ class QueueService {
    */
   async addJob(rawMatrixId: string): Promise<string> {
     const job = await this.processingQueue.add(
-      TRACK_PROCESSING_QUEUE,
+      DEVICE_MATRIX_PROCESSING_QUEUE,
       { rawMatrixId },
       {
         jobId: rawMatrixId, // Use rawMatrixId as jobId to prevent duplicates
@@ -78,7 +78,7 @@ class QueueService {
    */
   async addBulkJobs(rawMatrixIds: string[]): Promise<void> {
     const jobs = rawMatrixIds.map((id) => ({
-      name: TRACK_PROCESSING_QUEUE,
+      name: DEVICE_MATRIX_PROCESSING_QUEUE,
       data: { rawMatrixId: id },
       opts: {
         jobId: id,

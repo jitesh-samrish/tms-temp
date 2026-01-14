@@ -1,9 +1,9 @@
 import { Worker, Job } from 'bullmq';
 import mongoose from 'mongoose';
 import {
-  TRACK_PROCESSING_QUEUE,
+  DEVICE_MATRIX_PROCESSING_QUEUE,
   TrackProcessingJobData,
-} from '../services/TrackProcessingQueueService';
+} from '../services/DeviceMatrixProcessingQueueService';
 import { DeviceMatrix } from '../models/DeviceMatrix.model';
 import { ProcessedDeviceMatrix } from '../models/ProcessedDeviceMatrix.model';
 import { calculateDistance } from '../utils/geo.util';
@@ -318,7 +318,7 @@ export class TrackProcessorWorker {
 
   constructor() {
     this.worker = new Worker<TrackProcessingJobData>(
-      TRACK_PROCESSING_QUEUE,
+      DEVICE_MATRIX_PROCESSING_QUEUE,
       processTrack,
       {
         connection: redisConnectionOptions,

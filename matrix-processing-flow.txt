@@ -43,7 +43,7 @@
 │  queueService.addJob(rawMatrixId)                               │
 │  • Creates BullMQ job with the matrix ID                        │
 │  • Job ID = rawMatrixId (prevents duplicates)                   │
-│  • Adds job to 'track-processing' queue in Redis               │
+│  • Adds job to 'device-matrix-processing' queue in Redis        │
 │  • Returns jobId for tracking                                   │
 └────────────────────────┬────────────────────────────────────────┘
                          │
