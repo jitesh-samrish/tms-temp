@@ -57,7 +57,7 @@ export class MatrixController {
   /**
    * Get raw device matrices with pagination
    * GET /api/v1/matrix/raw
-   * Query params: page, limit, deviceId, tripId, startDate, endDate
+   * Query params: page, limit, deviceIdentifier, tripId, startDate, endDate, after
    */
   getRawMatrices = async (
     req: Request,
@@ -70,8 +70,8 @@ export class MatrixController {
 
       const filters: any = {};
 
-      if (req.query.deviceId) {
-        filters.deviceId = req.query.deviceId as string;
+      if (req.query.deviceIdentifier) {
+        filters.deviceIdentifier = req.query.deviceIdentifier as string;
       }
 
       if (req.query.tripId) {
@@ -84,6 +84,10 @@ export class MatrixController {
 
       if (req.query.endDate) {
         filters.endDate = new Date(req.query.endDate as string);
+      }
+
+      if (req.query.after) {
+        filters.afterTimestamp = new Date(req.query.after as string);
       }
 
       logger.info(`Fetching raw matrices - page: ${page}, limit: ${limit}`);
@@ -108,7 +112,7 @@ export class MatrixController {
   /**
    * Get processed device matrices with pagination
    * GET /api/v1/matrix/processed
-   * Query params: page, limit, deviceId, tripId, startDate, endDate
+   * Query params: page, limit, deviceIdentifier, tripId, startDate, endDate, after
    */
   getProcessedMatrices = async (
     req: Request,
@@ -121,8 +125,8 @@ export class MatrixController {
 
       const filters: any = {};
 
-      if (req.query.deviceId) {
-        filters.deviceId = req.query.deviceId as string;
+      if (req.query.deviceIdentifier) {
+        filters.deviceIdentifier = req.query.deviceIdentifier as string;
       }
 
       if (req.query.tripId) {
@@ -135,6 +139,10 @@ export class MatrixController {
 
       if (req.query.endDate) {
         filters.endDate = new Date(req.query.endDate as string);
+      }
+
+      if (req.query.after) {
+        filters.afterTimestamp = new Date(req.query.after as string);
       }
 
       logger.info(

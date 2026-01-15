@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Path Debugger: Raw vs Processed</title>
+
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: sans-serif;
+      }
+      #map {
+        height: 100vh;
+        width: 100%;
+      }
+
+      .controls {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1000;
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        width: 300px;
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 5px;
+      }
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 10px;
+      }
+      .line {
+        width: 20px;
+        height: 3px;
+        margin-right: 10px;
+      }
+      input[type='text'] {
+        width: 100%;
+        padding: 5px;
+        margin-bottom: 10px;
+        box-sizing: border-box;
+      }
+      button {
+        width: 100%;
+        padding: 8px;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #0056b3;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="controls">
+      <h3>📍 Path Debugger</h3>
+
+      <label>Device Identifier:</label>
+      <input
+        type="text"
+        id="deviceId"
+        value="YOUR_DEVICE_ID_HERE"
+        placeholder="Enter Device Identifier (e.g., IMEI)"
+      />
+
+      <button onclick="startAutoRefresh()">🔄 Start Auto-Refresh</button>
+      <button
+        onclick="stopAutoRefresh()"
+        style="background: #dc3545; margin-top: 5px"
+      >
+        ⏸️ Stop Refresh
+      </button>
+      <button
+        onclick="loadData(false)"
+        style="background: #28a745; margin-top: 5px"
+      >
+        🔃 Manual Refresh
+      </button>
+
+      <hr />
+
+      <div style="font-size: 12px; margin-bottom: 10px">
+        <strong>Auto-refresh:</strong> Every 10 seconds<br />
+        <strong>Status:</strong> <span id="status">Stopped</span>
+      </div>
+
+      <hr />
+
+      <div class="legend-item">
+        <div class="dot" style="background: red"></div>
+        <span>Raw GPS Pings (Noise)</span>
+      </div>
+      <div class="legend-item">
+        <div class="line" style="background: blue"></div>
+        <span>Processed Path (Clean)</span>
+      </div>
+      <div class="legend-item">
+        <div
+          class="dot"
+          style="background: orange; border: 2px solid black"
+        ></div>
+        <span>Current Location</span>
+      </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+
+    <script>
+      // --- CONFIGURATION ---
+      const API_BASE = 'http://localhost:8000'; // TMS API
+      const REFRESH_INTERVAL = 10000; // 10 seconds
+
+      // State management
+      let lastRawTimestamp = null;
+      let lastProcessedTimestamp = null;
+      let refreshTimer = null;
+
+      // 1. Initialize Map
+      // Set view to Delhi (fallback)
+      const map = L.map('map').setView([28.6139, 77.209], 13);
+
+      // 2. Add OSM Tile Layer (The visual map images)
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution:
+          '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      }).addTo(map);
+
+      // Layer Groups to manage clearing old data
+      const rawLayer = L.layerGroup().addTo(map);
+      const processedLayer = L.layerGroup().addTo(map);
+
+      async function loadData(incremental = false) {
+        const deviceIdentifier = document.getElementById('deviceId').value;
+        if (!deviceIdentifier) return alert('Please enter a Device Identifier');
+
+        // Clear previous map markers only if not incremental
+        if (!incremental) {
+          rawLayer.clearLayers();
+          processedLayer.clearLayers();
+          lastRawTimestamp = null;
+          lastProcessedTimestamp = null;
+        }
+
+        try {
+          // --- FETCH RAW DATA ---
+          let rawUrl = `${API_BASE}/tms/v1/matrix/raw?deviceIdentifier=${encodeURIComponent(
+            deviceIdentifier
+          )}&limit=500`;
+          if (incremental && lastRawTimestamp) {
+            rawUrl += `&after=${lastRawTimestamp}`;
+          }
+
+          const rawRes = await fetch(rawUrl);
+          const rawResponse = await rawRes.json();
+          const rawData = rawResponse.success ? rawResponse.data : [];
+
+          // Draw Raw Points (Red Dots)
+          if (Array.isArray(rawData) && rawData.length > 0) {
+            rawData.forEach((p) => {
+              // Create a red circle for every raw ping
+              L.circleMarker(
+                [p.coordinates.latitude, p.coordinates.longitude],
+                {
+                  radius: 3,
+                  fillColor: 'red',
+                  color: 'red',
+                  weight: 1,
+                  opacity: 0.5,
+                  fillOpacity: 0.5,
+                }
+              )
+                .bindPopup(
+                  `Raw<br>Time: ${new Date(
+                    p.timestamp
+                  ).toLocaleTimeString()}<br>Speed: ${p.metadata?.speed || 0}`
+                )
+                .addTo(rawLayer);
+            });
+
+            // Update last timestamp (data is sorted DESC, so first item is latest)
+            lastRawTimestamp = new Date(rawData[0].timestamp).toISOString();
+          }
+
+          // --- FETCH PROCESSED DATA ---
+          let procUrl = `${API_BASE}/tms/v1/matrix/processed?deviceIdentifier=${encodeURIComponent(
+            deviceIdentifier
+          )}&limit=500`;
+          if (incremental && lastProcessedTimestamp) {
+            procUrl += `&after=${lastProcessedTimestamp}`;
+          }
+
+          const procRes = await fetch(procUrl);
+          const procResponse = await procRes.json();
+          const procData = procResponse.success ? procResponse.data : [];
+
+          // Draw Processed Path (Blue Line)
+          if (Array.isArray(procData) && procData.length > 0) {
+            // Update last timestamp
+            lastProcessedTimestamp = new Date(
+              procData[0].timestamp
+            ).toISOString();
+
+            if (!incremental) {
+              // Full redraw: Extract lat/lngs for the polyline (reverse since data is DESC)
+              const latlngs = procData
+                .reverse()
+                .map((p) => [p.coordinates.latitude, p.coordinates.longitude]);
+
+              // Draw the smooth line
+              const polyline = L.polyline(latlngs, {
+                color: 'blue',
+                weight: 4,
+                opacity: 0.8,
+              }).addTo(processedLayer);
+
+              // Zoom map to fit the path
+              map.fitBounds(polyline.getBounds());
+
+              // Mark the LATEST position (last item after reverse)
+              const last = latlngs[latlngs.length - 1];
+              L.circleMarker(last, {
+                radius: 8,
+                fillColor: 'orange',
+                color: 'black',
+                weight: 2,
+                fillOpacity: 1,
+              })
+                .addTo(processedLayer)
+                .bindPopup('Current Location');
+            } else {
+              // Incremental: Redraw the entire path
+              processedLayer.clearLayers();
+
+              // Fetch all data to redraw complete path
+              const allProcRes = await fetch(
+                `${API_BASE}/tms/v1/matrix/processed?deviceIdentifier=${encodeURIComponent(
+                  deviceIdentifier
+                )}&limit=500`
+              );
+              const allProcResponse = await allProcRes.json();
+              const allProcData = allProcResponse.success
+                ? allProcResponse.data
+                : [];
+
+              if (allProcData.length > 0) {
+                const latlngs = allProcData
+                  .reverse()
+                  .map((p) => [
+                    p.coordinates.latitude,
+                    p.coordinates.longitude,
+                  ]);
+
+                const polyline = L.polyline(latlngs, {
+                  color: 'blue',
+                  weight: 4,
+                  opacity: 0.8,
+                }).addTo(processedLayer);
+
+                // Mark the LATEST position
+                const last = latlngs[latlngs.length - 1];
+                L.circleMarker(last, {
+                  radius: 8,
+                  fillColor: 'orange',
+                  color: 'black',
+                  weight: 2,
+                  fillOpacity: 1,
+                })
+                  .addTo(processedLayer)
+                  .bindPopup('Current Location');
+              }
+            }
+          }
+
+          console.log(
+            `Loaded ${rawData.length} raw points, ${procData.length} processed points`
+          );
+        } catch (err) {
+          console.error(err);
+          alert('Error fetching data. Check console and API URL.');
+        }
+      }
+
+      function startAutoRefresh() {
+        if (refreshTimer) {
+          clearInterval(refreshTimer);
+        }
+
+        document.getElementById('status').textContent = 'Running';
+        document.getElementById('status').style.color = 'green';
+
+        // Initial load
+        loadData(false);
+
+        // Auto-refresh every 10 seconds (incremental)
+        refreshTimer = setInterval(() => {
+          loadData(true);
+        }, REFRESH_INTERVAL);
+      }
+
+      function stopAutoRefresh() {
+        if (refreshTimer) {
+          clearInterval(refreshTimer);
+          refreshTimer = null;
+        }
+        document.getElementById('status').textContent = 'Stopped';
+        document.getElementById('status').style.color = 'red';
+      }
+
+      // Auto-start on page load if device ID is set
+      window.addEventListener('DOMContentLoaded', () => {
+        const deviceId = document.getElementById('deviceId').value;
+        if (deviceId && deviceId !== 'YOUR_DEVICE_ID_HERE') {
+          startAutoRefresh();
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -36,7 +36,7 @@ matrixRouter.post(
  * @route   GET /api/v1/matrix/raw
  * @desc    Get raw device matrices with pagination
  * @access  Public (or use AuthMiddleware.authenticate if needed)
- * @query   page, limit, deviceId, tripId, startDate, endDate
+ * @query   page, limit, deviceIdentifier, tripId, startDate, endDate, after
  */
 matrixRouter.get(
   '/raw',
@@ -48,7 +48,7 @@ matrixRouter.get(
  * @route   GET /api/v1/matrix/processed
  * @desc    Get processed device matrices with pagination
  * @access  Public (or use AuthMiddleware.authenticate if needed)
- * @query   page, limit, deviceId, tripId, startDate, endDate
+ * @query   page, limit, deviceIdentifier, tripId, startDate, endDate, after
  */
 matrixRouter.get(
   '/processed',

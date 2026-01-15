@@ -27,10 +27,11 @@ export interface IMatrixService {
     page: number,
     limit: number,
     filters?: {
-      deviceId?: string;
+      deviceIdentifier?: string;
       tripId?: string;
       startDate?: Date;
       endDate?: Date;
+      afterTimestamp?: Date;
     }
   ): Promise<{
     matrices: IDeviceMatrix[];
@@ -46,10 +47,11 @@ export interface IMatrixService {
     page: number,
     limit: number,
     filters?: {
-      deviceId?: string;
+      deviceIdentifier?: string;
       tripId?: string;
       startDate?: Date;
       endDate?: Date;
+      afterTimestamp?: Date;
     }
   ): Promise<{
     matrices: IProcessedDeviceMatrix[];
@@ -186,10 +188,11 @@ export class MatrixService implements IMatrixService {
     page: number = 1,
     limit: number = 50,
     filters?: {
-      deviceId?: string;
+      deviceIdentifier?: string;
       tripId?: string;
       startDate?: Date;
       endDate?: Date;
+      afterTimestamp?: Date;
     }
   ): Promise<{
     matrices: IDeviceMatrix[];
@@ -204,15 +207,31 @@ export class MatrixService implements IMatrixService {
       // Validate pagination parameters
       if (page < 1) page = 1;
       if (limit < 1) limit = 50;
-      if (limit > 100) limit = 100; // Max 100 items per page
+      if (limit > 1000) limit = 1000; // Max 1000 items per page
+
+      let deviceId: string | undefined;
+
+      // If deviceIdentifier is provided, look up the device
+      if (filters?.deviceIdentifier) {
+        const device = await this.deviceRepository.getDeviceByIdentifier(
+          filters.deviceIdentifier
+        );
+        if (!device) {
+          throw new NotFoundException(
+            `Device not found with identifier: ${filters.deviceIdentifier}`
+          );
+        }
+        deviceId = device._id.toString();
+      }
 
       const result = await this.matrixRepository.getRawMatrices(
         page,
         limit,
-        filters?.deviceId,
+        deviceId,
         filters?.tripId,
         filters?.startDate,
-        filters?.endDate
+        filters?.endDate,
+        filters?.afterTimestamp
       );
 
       return {
@@ -237,10 +256,11 @@ export class MatrixService implements IMatrixService {
     page: number = 1,
     limit: number = 50,
     filters?: {
-      deviceId?: string;
+      deviceIdentifier?: string;
       tripId?: string;
       startDate?: Date;
       endDate?: Date;
+      afterTimestamp?: Date;
     }
   ): Promise<{
     matrices: IProcessedDeviceMatrix[];
@@ -255,15 +275,31 @@ export class MatrixService implements IMatrixService {
       // Validate pagination parameters
       if (page < 1) page = 1;
       if (limit < 1) limit = 50;
-      if (limit > 100) limit = 100; // Max 100 items per page
+      if (limit > 1000) limit = 1000; // Max 1000 items per page
+
+      let deviceId: string | undefined;
+
+      // If deviceIdentifier is provided, look up the device
+      if (filters?.deviceIdentifier) {
+        const device = await this.deviceRepository.getDeviceByIdentifier(
+          filters.deviceIdentifier
+        );
+        if (!device) {
+          throw new NotFoundException(
+            `Device not found with identifier: ${filters.deviceIdentifier}`
+          );
+        }
+        deviceId = device._id.toString();
+      }
 
       const result = await this.matrixRepository.getProcessedMatrices(
         page,
         limit,
-        filters?.deviceId,
+        deviceId,
         filters?.tripId,
         filters?.startDate,
-        filters?.endDate
+        filters?.endDate,
+        filters?.afterTimestamp
       );
 
       return {

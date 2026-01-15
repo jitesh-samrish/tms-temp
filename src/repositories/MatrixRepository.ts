@@ -22,7 +22,8 @@ export interface IMatrixRepository {
     deviceId?: string,
     tripId?: string,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    afterTimestamp?: Date
   ): Promise<{
     matrices: IDeviceMatrix[];
     total: number;
@@ -36,7 +37,8 @@ export interface IMatrixRepository {
     deviceId?: string,
     tripId?: string,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    afterTimestamp?: Date
   ): Promise<{
     matrices: IProcessedDeviceMatrix[];
     total: number;
@@ -98,7 +100,8 @@ export class MatrixRepository implements IMatrixRepository {
     deviceId?: string,
     tripId?: string,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    afterTimestamp?: Date
   ): Promise<{
     matrices: IDeviceMatrix[];
     total: number;
@@ -117,13 +120,17 @@ export class MatrixRepository implements IMatrixRepository {
         query.tripId = new mongoose.Types.ObjectId(tripId);
       }
 
-      if (startDate || endDate) {
+      if (startDate || endDate || afterTimestamp) {
         query.timestamp = {};
-        if (startDate) {
-          query.timestamp.$gte = startDate;
-        }
-        if (endDate) {
-          query.timestamp.$lte = endDate;
+        if (afterTimestamp) {
+          query.timestamp.$gt = afterTimestamp;
+        } else {
+          if (startDate) {
+            query.timestamp.$gte = startDate;
+          }
+          if (endDate) {
+            query.timestamp.$lte = endDate;
+          }
         }
       }
 
@@ -163,7 +170,8 @@ export class MatrixRepository implements IMatrixRepository {
     deviceId?: string,
     tripId?: string,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    afterTimestamp?: Date
   ): Promise<{
     matrices: IProcessedDeviceMatrix[];
     total: number;
@@ -182,13 +190,17 @@ export class MatrixRepository implements IMatrixRepository {
         query.tripId = new mongoose.Types.ObjectId(tripId);
       }
 
-      if (startDate || endDate) {
+      if (startDate || endDate || afterTimestamp) {
         query.timestamp = {};
-        if (startDate) {
-          query.timestamp.$gte = startDate;
-        }
-        if (endDate) {
-          query.timestamp.$lte = endDate;
+        if (afterTimestamp) {
+          query.timestamp.$gt = afterTimestamp;
+        } else {
+          if (startDate) {
+            query.timestamp.$gte = startDate;
+          }
+          if (endDate) {
+            query.timestamp.$lte = endDate;
+          }
         }
       }
 
